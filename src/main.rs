@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 // Simple key-value store CLI
 #[derive(Parser, Debug)]
-#[command(name = "kvstore")]
+#[command(name = "Ezpz Database")]
 #[command(about = "Simple key-value store CLI", long_about = None)]
 struct Cli {
     // Key to get or set
@@ -20,6 +20,9 @@ enum Command {
     Set {
         key: String,
         value: String,
+    },
+    Delete {
+        key: String,
     },
 }
 
@@ -50,6 +53,10 @@ fn main() {
         }
         Cli { command: Some(Command::Set { key, value }) } => {
             store.insert(key, value);
+            save(&store);
+        }
+        Cli { command: Some(Command::Delete { key }) } => {
+            store.remove(&key);
             save(&store);
         }
         _ => {
