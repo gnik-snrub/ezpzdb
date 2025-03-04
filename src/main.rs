@@ -21,6 +21,7 @@ enum Command {
     },
     Set {
         key: String,
+        field: String,
         value: String,
     },
     Delete {
@@ -62,8 +63,20 @@ fn main() {
                 None => println!("Key not found"),
             }
         }
-        Cli { command: Some(Command::Set { key, value }) } => {
-            store.insert(key, value);
+        Cli { command: Some(Command::Set { key, field, value }) } => {
+            let mut set = json!({});
+            if let Some(record) = store.get_mut(&key) {
+                if let Some(obj) = record.as_object_mut() {
+                    obj.insert(field, json!(value));
+                    set = json!(obj);
+                } else {
+                    println!("Record is not an object");
+                }
+            } else {
+                set = json!({field: json!(value)});
+            }
+            store.insert(key, set);
+
             save(&store);
         }
         Cli { command: Some(Command::Delete { key }) } => {
