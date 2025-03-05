@@ -28,6 +28,10 @@ enum Command {
     Delete {
         key: String,
     },
+    Filter {
+        field: String,
+        value: String,
+    }
 }
 
 fn save(store: &HashMap<String, Value>) {
@@ -86,6 +90,19 @@ fn main() {
         Cli { command: Some(Command::Delete { key }) } => {
             store.remove(&key);
             save(&store);
+        }
+        Cli { command: Some(Command::Filter { field, value }) } => {
+            let mut filtered_store = HashMap::new();
+            for (k, v) in store {
+                if v.get(&field).unwrap_or(&Value::Null) == &Value::String(value.clone()) {
+                    filtered_store.insert(k, v);
+                }
+            }
+            if filtered_store.is_empty() {
+                println!("No records found");
+            } else {
+                println!("{:?}", filtered_store);
+            }
         }
         _ => {
             println!("No command provided");
