@@ -18,6 +18,7 @@ enum Command {
     Read,
     Get {
         key: String,
+        field: Option<String>,
     },
     Set {
         key: String,
@@ -57,9 +58,12 @@ fn main() {
         Cli { command: Some(Command::Read) } => {
             println!("{:?}", store);
         }
-        Cli { command: Some(Command::Get { key }) } => {
+        Cli { command: Some(Command::Get { key, field }) } => {
             match store.get(&key) {
-                Some(value) => println!("{}", value),
+                Some(value) => match field {
+                    Some(field_value) => println!("{:?}", value.get(&field_value).unwrap_or(&Value::Null)),
+                    None => println!("{:?}", value),
+                }
                 None => println!("Key not found"),
             }
         }
