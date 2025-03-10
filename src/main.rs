@@ -31,8 +31,13 @@ enum Command {
     Filter {
         field: String,
         value: String,
-    }
+    },
+    Search {
+        #[arg(trailing_var_arg = true, num_args(1..))]
+        query: Vec<String>,
+    },
 }
+
 
 fn save(store: &HashMap<String, Value>) {
     let store_bin = serde_json::to_string(&store).unwrap();
@@ -104,8 +109,76 @@ fn main() {
                 println!("{:?}", filtered_store);
             }
         }
+        Cli { command: Some(Command::Search { query }) } => {
+            let mut select_tokens = vec![];
+            let mut from_tokens = vec![];
+            let mut where_tokens = vec![];
+
+            let mut current_token = CurrentToken::None;
+
+            for q in query {
+                if q == "SELECT" {
+                    current_token = CurrentToken::Select;
+                } else if q == "FROM" {
+                    current_token = CurrentToken::From;
+                } else if q == "WHERE" {
+                    current_token = CurrentToken::Where;
+                } else {
+                    match current_token {
+                        CurrentToken::Select => select_tokens.push(q),
+                        CurrentToken::From => from_tokens.push(q),
+                        CurrentToken::Where => where_tokens.push(q),
+                        CurrentToken::None => {}
+                    }
+                }
+            }
+
+            println!("Select: {:?}, From: {:?}, Where: {:?}", select_tokens, from_tokens, where_tokens);
+            let query = Query {
+                select: select_tokens,
+                from: from_tokens.join(""),
+                where_clause: match where_tokens[1].as_str() {
+                    "=" => Some(Condition::Equals(where_tokens[0].to_string(), SearchValue::Text(where_tokens[2].to_string()))),
+                    "!=" => Some(Condition::NotEquals(where_tokens[0].to_string(), SearchValue::Text(where_tokens[2].to_string()))),
+                    ">" => Some(Condition::GreaterThan(where_tokens[0].to_string(), SearchValue::Text(where_tokens[2].to_string()))),
+                    "<" => Some(Condition::LessThan(where_tokens[0].to_string(), SearchValue::Text(where_tokens[2].to_string()))),
+                    _ => None
+                }
+            };
+            println!("Query: {:?}", query);
+        }
         _ => {
             println!("No command provided");
         }
     }
+}
+
+enum CurrentToken {
+    Select,
+    From,
+    Where,
+    None,
+}
+
+#[derive(Debug)]
+struct Query {
+    select: Vec<String>,
+    from: String,
+    where_clause: Option<Condition>
+}
+
+#[derive(Debug)]
+enum Condition {
+    Equals(String, SearchValue),
+    NotEquals(String, SearchValue),
+    GreaterThan(String, SearchValue),
+    LessThan(String, SearchValue),
+}
+
+#[derive(Debug)]
+enum SearchValue {
+    Integer(i32),
+    Float(f64),
+    Text(String),
+    Boolean(bool),
 }
