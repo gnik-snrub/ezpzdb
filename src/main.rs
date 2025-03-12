@@ -113,58 +113,63 @@ fn main() {
             }
         }
         Cli { command: Some(Command::Search { query }) } => {
-            let mut select_tokens = vec![];
-            let mut from_tokens = vec![];
-            let mut where_tokens: Vec<WhereClause> = vec![];
-
-            let mut temp_where_tokens: Vec<String> = vec![];
-
-            let mut current_token: TokenOption = TokenOption::CurrentToken(CurrentToken::None);
-
-            for q in query {
-                if temp_where_tokens.len() > 3 {
-                    finalize_where_clause(&mut temp_where_tokens, &mut where_tokens);
-                } else if temp_where_tokens.len() > 2 && !(temp_where_tokens.contains(&String::from("AND")) || temp_where_tokens.contains(&String::from("OR"))) {
-                    finalize_where_clause(&mut temp_where_tokens, &mut where_tokens);
-                }
-                match q.as_str() {
-                    "SELECT" => current_token = TokenOption::CurrentToken(CurrentToken::Select),
-                    "FROM" => current_token = TokenOption::CurrentToken(CurrentToken::From),
-                    "WHERE" => current_token = TokenOption::CurrentToken(CurrentToken::Where),
-                    "AND" => {
-                        finalize_where_clause(&mut temp_where_tokens, &mut where_tokens);
-                        temp_where_tokens.push(q);
-                    },
-                    "OR" => {
-                        finalize_where_clause(&mut temp_where_tokens, &mut where_tokens);
-                        temp_where_tokens.push(q);
-                    }
-                    _ => {
-                        match current_token {
-                            TokenOption::CurrentToken(CurrentToken::Select) => select_tokens.push(q),
-                            TokenOption::CurrentToken(CurrentToken::From) => from_tokens.push(q),
-                            TokenOption::CurrentToken(CurrentToken::Where) => temp_where_tokens.push(q),
-                            _ => {}
-                        }
-                    }
-                }
-            }
-            finalize_where_clause(&mut temp_where_tokens, &mut where_tokens);
-
-            let query = Query {
-                select: select_tokens,
-                from: from_tokens.join(""),
-                where_clause: match where_tokens.len() {
-                    0 => None,
-                    _ => Some(where_tokens),
-                }
-            };
-            println!("{:?}", query);
+            let built_query = build_query(query);
+            println!("{:?}", built_query);
         }
         _ => {
             println!("No command provided");
         }
     }
+}
+
+fn build_query(query_tokens: Vec<String>) -> Query {
+    let mut select_tokens = vec![];
+    let mut from_tokens = vec![];
+    let mut where_tokens: Vec<WhereClause> = vec![];
+
+    let mut temp_where_tokens: Vec<String> = vec![];
+
+    let mut current_token: TokenOption = TokenOption::CurrentToken(CurrentToken::None);
+
+    for q in query_tokens {
+        if temp_where_tokens.len() > 3 {
+            finalize_where_clause(&mut temp_where_tokens, &mut where_tokens);
+        } else if temp_where_tokens.len() > 2 && !(temp_where_tokens.contains(&String::from("AND")) || temp_where_tokens.contains(&String::from("OR"))) {
+            finalize_where_clause(&mut temp_where_tokens, &mut where_tokens);
+        }
+        match q.as_str() {
+            "SELECT" => current_token = TokenOption::CurrentToken(CurrentToken::Select),
+            "FROM" => current_token = TokenOption::CurrentToken(CurrentToken::From),
+            "WHERE" => current_token = TokenOption::CurrentToken(CurrentToken::Where),
+            "AND" => {
+                finalize_where_clause(&mut temp_where_tokens, &mut where_tokens);
+                temp_where_tokens.push(q);
+            },
+            "OR" => {
+                finalize_where_clause(&mut temp_where_tokens, &mut where_tokens);
+                temp_where_tokens.push(q);
+            }
+            _ => {
+                match current_token {
+                    TokenOption::CurrentToken(CurrentToken::Select) => select_tokens.push(q),
+                    TokenOption::CurrentToken(CurrentToken::From) => from_tokens.push(q),
+                    TokenOption::CurrentToken(CurrentToken::Where) => temp_where_tokens.push(q),
+                    _ => {}
+                }
+            }
+        }
+    }
+    finalize_where_clause(&mut temp_where_tokens, &mut where_tokens);
+
+    let query = Query {
+        select: select_tokens,
+        from: from_tokens.join(""),
+        where_clause: match where_tokens.len() {
+            0 => None,
+            _ => Some(where_tokens),
+        }
+    };
+    query
 }
 
 fn finalize_where_clause(temp_where_tokens: &mut Vec<String>, where_tokens: &mut Vec<WhereClause>) {
