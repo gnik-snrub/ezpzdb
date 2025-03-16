@@ -114,7 +114,22 @@ fn main() {
         }
         Cli { command: Some(Command::Search { query }) } => {
             let built_query = build_query(query);
-            println!("{:?}", built_query);
+
+            let mut filtered_store = evaluate_query(&store, &built_query);
+            if filtered_store.is_empty() {
+                println!("No records found");
+            } else {
+                if built_query.select != vec!["*".to_string()] {
+                    for (_k, v) in filtered_store.iter_mut() {
+                        if let Some(obj) = v.as_object_mut() {
+                            obj.retain(|field_key, _field_value| {
+                                built_query.select.contains(field_key)
+                            })
+                        }
+                    }
+                }
+                println!("{:?}", filtered_store);
+            }
         }
         _ => {
             println!("No command provided");
