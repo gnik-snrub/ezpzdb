@@ -9,7 +9,7 @@ use serde_json::{self, json, Number, Value};
 // Simple key-value store CLI
 #[derive(Parser, Debug)]
 #[command(name = "Ezpz Database")]
-#[command(about = "Simple key-value store CLI", long_about = None)]
+#[command(about = "Simple SQL-like database CLI", long_about = None)]
 struct Cli {
     // Key to get or set
     #[command(subcommand)]
@@ -256,4 +256,52 @@ enum Condition {
     GreaterThan,
     LessThan,
     Invalid
+}
+
+fn evaluate_query(row: &HashMap<String, Value>, query: &Query) -> HashMap<String, Value> {
+    let clauses = match &query.where_clause {
+        Some(clauses) => clauses,
+        None => return row.clone(),
+    };
+
+    let output = row.clone().into_iter().filter(|v| {
+        let mut result = evaluate_clause(v, &clauses[0]);
+
+        for clause in clauses.iter().skip(1) {
+            let clause_result = evaluate_clause(v, clause);
+            match clause.connector {
+                Some(Connector::AND) => result = result && clause_result,
+                Some(Connector::OR) => result = result || clause_result,
+                None => { result = result && clause_result}
+            }
+        }
+
+        result
+    } ).collect();
+    output
+}
+
+fn evaluate_clause(data: &(String, Value), clause: &WhereClause) -> bool {
+    let left_hand = data.1.get(&clause.left_hand).unwrap_or(&Value::Null);
+    let mut right_hand = match &clause.right_hand {
+        RightHandType::Integer(i) => Value::Number(Number::from(*i)),
+        RightHandType::Float(f) => Value::Number(Number::from_f64(*f).expect("Invalid f64 value")),
+        RightHandType::Boolean(b) => Value::Bool(*b),
+        RightHandType::String(s) => Value::String(s.clone())
+    };
+    match clause.operator {
+        Condition::Equals => left_hand == &right_hand,
+        Condition::NotEquals => left_hand != &right_hand,
+        Condition::GreaterThan => compare(left_hand, &right_hand.take(), |l, r| l > r),
+        Condition::LessThan => compare(left_hand, &right_hand.take(), |l, r| l < r),
+        Condition::Invalid => false
+    }
+}
+
+fn compare(left: &Value, right: &Value, cmp: impl Fn(f64, f64) -> bool) -> bool {
+    if let (Some(l), Some(r)) = (left.as_str().unwrap().parse::<f64>().ok(), right.as_f64()) {
+        cmp(l, r)
+    } else {
+        false
+    }
 }
