@@ -3,7 +3,7 @@ use core::num;
 use std::any::type_name;
 use std::string;
 use std::{any::Any, fs};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use serde_json::{self, json, Number, Value};
 
 // Simple key-value store CLI
@@ -40,7 +40,6 @@ enum Command {
         query: Vec<String>,
     },
 }
-
 
 fn save(store: &HashMap<String, Value>) {
     let store_bin = serde_json::to_string(&store).unwrap();
@@ -129,6 +128,14 @@ fn main() {
                     }
                 }
                 println!("{:?}", filtered_store);
+
+                // List missing fields
+                let all_fields: HashSet<String> = store.values().filter_map(|v| v.as_object()).flat_map(|obj| obj.keys().cloned()).collect();
+                for field in &built_query.select {
+                    if !all_fields.contains(field) {
+                        println!("Field not found: {}", field);
+                    }
+                }
             }
         }
         _ => {
