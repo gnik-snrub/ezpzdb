@@ -16,24 +16,31 @@ struct Cli {
 
 #[derive(Subcommand, Clone, Debug)]
 enum Command {
-    Read,
+    Read {
+        table: String,
+    },
     Get {
+        table: String,
         key: String,
         field: Option<String>,
     },
     Set {
+        table: String,
         key: String,
         field: String,
         value: String,
     },
     Delete {
+        table: String,
         key: String,
     },
     Filter {
+        table: String,
         field: String,
         value: String,
     },
     Search {
+        table: String,
         #[arg(trailing_var_arg = true, num_args(1..))]
         query: Vec<String>,
     },
@@ -42,13 +49,14 @@ enum Command {
 
 pub fn ezpzdb_cli() {
     let cli = Cli::parse();
-    let mut store: HashMap<String, Value> = load();
 
     match cli {
-        Cli { command: Some(Command::Read) } => {
+        Cli { command: Some(Command::Read { table}) } => {
+            let store: HashMap<String, Value> = load(&table);
             println!("{:?}", store);
         }
-        Cli { command: Some(Command::Get { key, field }) } => {
+        Cli { command: Some(Command::Get { table, key, field }) } => {
+            let store: HashMap<String, Value> = load(&table);
             match store.get(&key) {
                 Some(value) => match field {
                     Some(field_value) => println!("{:?}", value.get(&field_value).unwrap_or(&Value::Null)),
@@ -57,7 +65,8 @@ pub fn ezpzdb_cli() {
                 None => println!("Key not found"),
             }
         }
-        Cli { command: Some(Command::Set { key, field, value }) } => {
+        Cli { command: Some(Command::Set { table, key, field, value }) } => {
+            let mut store: HashMap<String, Value> = load(&table);
             let mut set = json!({});
             if let Some(record) = store.get_mut(&key) {
                 if let Some(obj) = record.as_object_mut() {
@@ -71,13 +80,15 @@ pub fn ezpzdb_cli() {
             }
             store.insert(key, set);
 
-            save(&store);
+            save(&table, &store);
         }
-        Cli { command: Some(Command::Delete { key }) } => {
+        Cli { command: Some(Command::Delete { table, key }) } => {
+            let mut store: HashMap<String, Value> = load(&table);
             store.remove(&key);
-            save(&store);
+            save(&table, &store);
         }
-        Cli { command: Some(Command::Filter { field, value }) } => {
+        Cli { command: Some(Command::Filter { table, field, value }) } => {
+            let store: HashMap<String, Value> = load(&table);
             let mut filtered_store = HashMap::new();
             for (k, v) in store {
                 if v.get(&field).unwrap_or(&Value::Null) == &Value::String(value.clone()) {
@@ -90,7 +101,8 @@ pub fn ezpzdb_cli() {
                 println!("{:?}", filtered_store);
             }
         }
-        Cli { command: Some(Command::Search { query }) } => {
+        Cli { command: Some(Command::Search { table, query }) } => {
+            let store: HashMap<String, Value> = load(&table);
             // FROM not yet implemented, as the current implementation only allows for one table
             let built_query = build_query(query);
 
