@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use serde_json::{self, json, Number, Value};
 use std::collections::{HashMap, HashSet};
+use std::process::exit;
 use crate::query::{build_query, evaluate_query};
 use crate::db::{save, load};
 
@@ -33,6 +34,7 @@ enum Command {
     Delete {
         table: String,
         key: String,
+        //field: Option<String>,
     },
     Filter {
         table: String,
@@ -40,7 +42,6 @@ enum Command {
         value: String,
     },
     Search {
-        table: String,
         #[arg(trailing_var_arg = true, num_args(1..))]
         query: Vec<String>,
     },
@@ -101,10 +102,10 @@ pub fn ezpzdb_cli() {
                 println!("{:?}", filtered_store);
             }
         }
-        Cli { command: Some(Command::Search { table, query }) } => {
-            let store: HashMap<String, Value> = load(&table);
+        Cli { command: Some(Command::Search { query }) } => {
             // FROM not yet implemented, as the current implementation only allows for one table
             let built_query = build_query(query);
+            let store: HashMap<String, Value> = load(&built_query.from);
 
             let mut filtered_store = evaluate_query(&store, &built_query);
             if filtered_store.is_empty() {
