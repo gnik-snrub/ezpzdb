@@ -54,7 +54,7 @@ pub fn ezpzdb_cli() {
     match cli {
         Cli { command: Some(Command::Read { table}) } => {
             let store: HashMap<String, Value> = load(&table);
-            println!("{:?}", store);
+            print_to_cli(store);
         }
         Cli { command: Some(Command::Get { table, key, field }) } => {
             let store: HashMap<String, Value> = load(&table);
@@ -99,7 +99,7 @@ pub fn ezpzdb_cli() {
             if filtered_store.is_empty() {
                 println!("No records found");
             } else {
-                println!("{:?}", filtered_store);
+                print_to_cli(filtered_store);
             }
         }
         Cli { command: Some(Command::Search { query }) } => {
@@ -120,7 +120,8 @@ pub fn ezpzdb_cli() {
                         }
                     }
                 }
-                println!("{:?}", filtered_store);
+
+                print_to_cli(filtered_store);
 
                 // List missing fields
                 let all_fields: HashSet<String> = store.values().filter_map(|v| v.as_object()).flat_map(|obj| obj.keys().cloned()).collect();
@@ -133,6 +134,38 @@ pub fn ezpzdb_cli() {
         }
         _ => {
             println!("No command provided");
+        }
+    }
+}
+
+fn print_to_cli(data: HashMap<String, Value>) {
+    let mut first_line = String::from(" | ");
+    match data.values().next() {
+        Some(entry) => {
+            let value = serde_json::to_value(entry).unwrap();
+            if let Value::Object(map) = value {
+                let field_names: Vec<String> = map.keys().cloned().collect();
+                for field in field_names {
+                    first_line.push_str(field.as_str());
+                    first_line.push_str(" | ")
+                }
+                println!("{}", first_line);
+            }
+        },
+        None => {
+            println!("Entry not found");
+        }
+    }
+    for entry in data.values() {
+        let mut entry_text = String::from(" | ");
+        let value = serde_json::to_value(entry).unwrap();
+        if let Value::Object(map) = value {
+            let field_names: Vec<&Value> = map.values().collect();
+            for field in field_names {
+                entry_text.push_str(field.as_str().unwrap());
+                entry_text.push_str(" | ")
+            }
+            println!("{}", entry_text);
         }
     }
 }
