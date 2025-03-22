@@ -139,33 +139,75 @@ pub fn ezpzdb_cli() {
 }
 
 fn print_to_cli(data: HashMap<String, Value>) {
-    let mut first_line = String::from(" | ");
+    let mut headers: Vec<String> = vec![];
+    let mut rows: Vec<Vec<Value>> = vec![];
+
     match data.values().next() {
         Some(entry) => {
             let value = serde_json::to_value(entry).unwrap();
             if let Value::Object(map) = value {
-                let field_names: Vec<String> = map.keys().cloned().collect();
-                for field in field_names {
-                    first_line.push_str(field.as_str());
-                    first_line.push_str(" | ")
+                for field in map.keys().cloned() {
+                    headers.push(field);
                 }
-                println!("{}", first_line);
             }
         },
         None => {
-            println!("Entry not found");
+            println!("No entries found");
         }
     }
+
+    headers.sort();
+    if let Some(pos) = headers.iter().position(|h| h == "key") {
+        if pos != 0 {
+            let key = headers.remove(pos);
+            headers.insert(0, key);
+        }
+    };
+
     for entry in data.values() {
-        let mut entry_text = String::from(" | ");
         let value = serde_json::to_value(entry).unwrap();
         if let Value::Object(map) = value {
-            let field_names: Vec<&Value> = map.values().collect();
-            for field in field_names {
-                entry_text.push_str(field.as_str().unwrap());
-                entry_text.push_str(" | ")
+            let mut row = vec![];
+
+            for header in &headers {
+                row.push(map.get(header).cloned().unwrap_or(Value::Null));
             }
-            println!("{}", entry_text);
+            rows.push(row);
         }
+    }
+
+    let mut col_widths: HashMap<usize, usize> = HashMap::new();
+    for (col, header) in headers.iter().enumerate() {
+        let max_length = rows.iter()
+            .map(|row| match &row[col] {
+                Value::String(s) => s.len(),
+                v => v.to_string().len(),
+            })
+            .max()
+            .unwrap_or(0);
+        col_widths.insert(col, max_length.max(header.len()));
+    }
+
+    print!("|");
+    for (col, header) in headers.iter().enumerate() {
+        print!("{:<width$} | ", header, width = col_widths[&col]);
+    }
+    println!();
+
+    print!("|");
+    for col in 0..headers.len() {
+        print!("{:-<width$}-|-", "-", width = col_widths[&col]);
+    }
+    println!();
+
+    for row in &rows {
+        print!("|");
+        for (col, value) in row.iter().enumerate() {
+            match value {
+                Value::String(s) => print!("{:<width$} | ", s, width = col_widths[&col]),
+                _ => print!("{:-<width$} | ", value, width = col_widths[&col]),
+            }
+        }
+        println!();
     }
 }
