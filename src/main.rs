@@ -5,6 +5,7 @@ pub mod query;
 pub mod ddl;
 pub mod dml;
 pub mod dql;
+pub mod storage;
 
 fn main() {
     ezpzdb_cli();
