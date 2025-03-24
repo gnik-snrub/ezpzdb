@@ -1,5 +1,5 @@
-use serde_json::{self, json, Number, Value};
-use std::collections::{HashMap, HashSet};
+use serde_json::{self, Number, Value};
+use std::collections::HashMap;
 
 pub fn build_query(query_tokens: Vec<String>) -> Query {
     let mut select_tokens = vec![];
@@ -60,7 +60,6 @@ fn finalize_where_clause(temp_where_tokens: &mut Vec<String>, where_tokens: &mut
 
 enum TokenOption {
     CurrentToken(CurrentToken),
-    Connector(Connector),
 }
 
 enum CurrentToken {
@@ -107,7 +106,7 @@ fn build_where_clause(mut where_tokens: Vec<String>) -> WhereClause {
 }
 
 #[derive(Debug)]
-struct WhereClause {
+pub struct WhereClause {
     left_hand: String,
     operator: Condition,
     right_hand: RightHandType,

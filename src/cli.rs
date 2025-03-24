@@ -1,7 +1,6 @@
 use clap::{Parser, Subcommand};
-use serde_json::{self, json, Number, Value};
+use serde_json::{self, json, Value};
 use std::collections::{HashMap, HashSet};
-use std::process::exit;
 use crate::query::{build_query, evaluate_query};
 use crate::db::{save, load};
 

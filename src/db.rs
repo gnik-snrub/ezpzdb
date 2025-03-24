@@ -1,9 +1,6 @@
-use core::num;
-use std::any::type_name;
-use std::string;
-use std::{any::Any, fs};
-use std::collections::{HashMap, HashSet};
-use serde_json::{self, json, Number, Value};
+use std::fs;
+use std::collections::HashMap;
+use serde_json::{self, Value};
 use directories::UserDirs;
 
 pub fn save(table: &String, store: &HashMap<String, Value>) {
