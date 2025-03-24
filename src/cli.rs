@@ -3,6 +3,7 @@ use serde_json::{self, json, Value};
 use std::collections::{HashMap, HashSet};
 use crate::query::{build_query, evaluate_query};
 use crate::db::{save, load};
+use crate::dql::select::{self, select};
 
 // Simple key-value store CLI
 #[derive(Parser, Debug)]
@@ -102,32 +103,14 @@ pub fn ezpzdb_cli() {
             }
         }
         Cli { command: Some(Command::Search { query }) } => {
-            // FROM not yet implemented, as the current implementation only allows for one table
-            let built_query = build_query(query);
-            let store: HashMap<String, Value> = load(&built_query.from);
-
-            let mut filtered_store = evaluate_query(&store, &built_query);
-            if filtered_store.is_empty() {
+            let (query_results, missing_fields) = select(query);
+            if query_results.is_empty() {
                 println!("No records found");
             } else {
-                if built_query.select != vec!["*".to_string()] {
-                    for (_k, v) in filtered_store.iter_mut() {
-                        if let Some(obj) = v.as_object_mut() {
-                            obj.retain(|field_key, _field_value| {
-                                built_query.select.contains(field_key)
-                            })
-                        }
-                    }
-                }
+                print_to_cli(query_results);
 
-                print_to_cli(filtered_store);
-
-                // List missing fields
-                let all_fields: HashSet<String> = store.values().filter_map(|v| v.as_object()).flat_map(|obj| obj.keys().cloned()).collect();
-                for field in &built_query.select {
-                    if !all_fields.contains(field) {
-                        println!("Field not found: {}", field);
-                    }
+                for field in missing_fields {
+                    println!("Field not found: {}", field);
                 }
             }
         }
