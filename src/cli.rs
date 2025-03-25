@@ -1,9 +1,9 @@
 use clap::{Parser, Subcommand};
 use serde_json::{self, json, Value};
-use std::collections::{HashMap, HashSet};
-use crate::query::{build_query, evaluate_query};
+use std::collections::HashMap;
+use crate::ddl::create::{create, CreateData};
 use crate::db::{save, load};
-use crate::dql::select::{self, select};
+use crate::dql::select::select;
 
 // Simple key-value store CLI
 #[derive(Parser, Debug)]
@@ -44,6 +44,11 @@ enum Command {
     Search {
         #[arg(trailing_var_arg = true, num_args(1..))]
         query: Vec<String>,
+    },
+    Create {
+        name: String,
+        #[arg(trailing_var_arg = true, num_args(1..))]
+        schema: Vec<String>,
     },
 }
 
@@ -113,6 +118,9 @@ pub fn ezpzdb_cli() {
                     println!("Field not found: {}", field);
                 }
             }
+        }
+        Cli { command: Some(Command::Create { name, schema }) } => {
+            create(CreateData::Table {name, schema});
         }
         _ => {
             println!("No command provided");
