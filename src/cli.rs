@@ -3,6 +3,7 @@ use serde_json::{self, json, Value};
 use std::collections::HashMap;
 use crate::ddl::create::{create, CreateData};
 use crate::db::{save, load};
+use crate::ddl::drop::drop;
 use crate::dql::select::select;
 
 // Simple key-value store CLI
@@ -49,6 +50,9 @@ enum Command {
         name: String,
         #[arg(trailing_var_arg = true, num_args(1..))]
         schema: Vec<String>,
+    },
+    Drop {
+        name: String,
     },
 }
 
@@ -121,6 +125,9 @@ pub fn ezpzdb_cli() {
         }
         Cli { command: Some(Command::Create { name, schema }) } => {
             create(CreateData::Table {name, schema});
+        }
+        Cli { command: Some(Command::Drop { name }) } => {
+            drop(name);
         }
         _ => {
             println!("No command provided");
