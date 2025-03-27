@@ -1,6 +1,7 @@
-use std::{collections::VecDeque, fs::write};
+use std::{collections::{HashMap, VecDeque}, fs::write};
 use directories::UserDirs;
-use serde::{Serialize, Deserialize};
+
+use crate::models::{FieldDataType, FieldDef, SerialState, Table};
 
 pub enum CreateData {
     Table { name: String, schema: Vec<String> },
@@ -18,14 +19,11 @@ pub fn create(create_data: CreateData) {
                 let path = dirs.home_dir().join("Documents/ezpzdb/").join(file_name);
 
                 let fields = generate_schema(schema.clone().into());
-                let schema_json = serde_json::to_string_pretty(&fields);
+                let new_table = Table { schema: fields, data: HashMap::new()};
+                let schema_json = serde_json::to_string_pretty(&new_table);
                 match schema_json {
                     Ok(sj) => {
-                        let new_table = format!(
-                            "{{\n\t\"schema\": {}, \n\t\"table\": []\n}}",
-                            sj
-                        );
-                        let new_file = write(path, new_table);
+                        let new_file = write(path, sj);
                         match new_file {
                             Ok(_) => { println!("New table created"); },
                             Err(_) => { panic!("Error creating table"); }
@@ -39,27 +37,6 @@ pub fn create(create_data: CreateData) {
             }
         },
     }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-enum FieldDataType {
-    TEXT,
-    NUMBER,
-    BOOLEAN,
-    SERIAL,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct FieldDef {
-    name: String,
-    data_type: Option<FieldDataType>,
-    primary_key: bool,
-    serial: Option<SerialState>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct SerialState {
-    next_val: u32,
 }
 
 fn generate_schema(mut schema_tokens: VecDeque<String>) -> Vec<FieldDef> {
