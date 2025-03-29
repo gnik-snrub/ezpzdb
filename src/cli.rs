@@ -54,6 +54,10 @@ enum Command {
     Drop {
         name: String,
     },
+    Insert {
+        table: String,
+        tokens: Vec<String>,
+    },
 }
 
 
@@ -128,6 +132,10 @@ pub fn ezpzdb_cli() {
         }
         Cli { command: Some(Command::Drop { name }) } => {
             drop(name);
+        }
+        Cli { command: Some(Command::Insert { table, tokens }) } => {
+            let table_data: Table = load_from_disk(&table);
+            insert(table_data, tokens);
         }
         _ => {
             println!("No command provided");
