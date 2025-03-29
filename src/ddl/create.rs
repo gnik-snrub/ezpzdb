@@ -14,12 +14,12 @@ pub fn create(create_data: CreateData) {
     match create_data {
         CreateData::Table {name, schema }=> {
             if let Some(dirs) = UserDirs::new() {
-                let mut file_name = String::from(name);
+                let mut file_name = String::from(name.clone());
                 file_name.push_str(".db");
                 let path = dirs.home_dir().join("Documents/ezpzdb/").join(file_name);
 
                 let fields = generate_schema(schema.clone().into());
-                let new_table = Table { schema: fields, data: HashMap::new()};
+                let new_table = Table { name, schema: fields, data: HashMap::new()};
                 let schema_json = serde_json::to_string_pretty(&new_table);
                 match schema_json {
                     Ok(sj) => {
