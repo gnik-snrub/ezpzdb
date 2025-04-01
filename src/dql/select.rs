@@ -1,12 +1,13 @@
-use serde_json::{self, Number, Value};
+
+use serde_json::{self, Value};
 use std::collections::{HashMap, HashSet};
-use crate::storage::load_from_disk;
+use crate::{models::Table, storage::load_from_disk};
 
-pub fn select(query: Vec<String> ) -> (HashMap<String, Value>, Vec<String>) {
+pub fn select(query: Vec<String> ) -> (HashMap<Value, Value>, Vec<String>) {
     let built_query: Query = build_query(query);
-    let store: HashMap<String, Value> = load_from_disk(&built_query.from);
+    let table: Table = load_from_disk(&built_query.from);
 
-    let mut filtered_store: HashMap<String, Value> = evaluate_query(&store, &built_query);
+    let mut filtered_store: HashMap<Value, Value> = evaluate_query(&table.data, &built_query);
     if filtered_store.is_empty() {
         (filtered_store, vec![])
     } else {
@@ -21,7 +22,7 @@ pub fn select(query: Vec<String> ) -> (HashMap<String, Value>, Vec<String>) {
         }
 
         // List missing fields
-        let all_fields: HashSet<String> = store.values().filter_map(|v| v.as_object()).flat_map(|obj| obj.keys().cloned()).collect();
+        let all_fields: HashSet<String> = table.data.values().filter_map(|v| v.as_object()).flat_map(|obj| obj.keys().cloned()).collect();
         let mut missing_fields: Vec<String> = Vec::new();
         for field in &built_query.select {
             if !all_fields.contains(field) {
@@ -128,10 +129,10 @@ fn build_where_clause(mut where_tokens: Vec<String>) -> WhereClause {
             _ => Condition::Invalid
         },
         right_hand: match where_tokens.get(2) {
-            Some(t) if t.parse::<i32>().is_ok() => RightHandType::Integer(i32::from(t.parse::<i32>().unwrap())),
-            Some(t) if t.parse::<f64>().is_ok() => RightHandType::Float(f64::from(t.parse::<f64>().unwrap())),
-            Some(t) if t.parse::<bool>().is_ok() => RightHandType::Boolean(bool::from(t.parse::<bool>().unwrap())),
-            _ => {RightHandType::String(where_tokens[2].clone())},
+            Some(t) if t.parse::<i32>().is_ok() => HandType::Integer(i64::from(t.parse::<i64>().unwrap())),
+            Some(t) if t.parse::<f64>().is_ok() => HandType::Float(f64::from(t.parse::<f64>().unwrap())),
+            Some(t) if t.parse::<bool>().is_ok() => HandType::Boolean(bool::from(t.parse::<bool>().unwrap())),
+            _ => {HandType::String(where_tokens[2].clone())},
         },
         connector,
     }
@@ -141,7 +142,7 @@ fn build_where_clause(mut where_tokens: Vec<String>) -> WhereClause {
 pub struct WhereClause {
     left_hand: String,
     operator: Condition,
-    right_hand: RightHandType,
+    right_hand: HandType,
     connector: Option<Connector>,
 }
 
@@ -152,9 +153,9 @@ enum Connector {
 }
 
 #[derive(Debug)]
-enum RightHandType {
+enum HandType {
     String(String),
-    Integer(i32),
+    Integer(i64),
     Float(f64),
     Boolean(bool),
 }
@@ -168,50 +169,78 @@ enum Condition {
     Invalid
 }
 
-pub fn evaluate_query(row: &HashMap<String, Value>, query: &Query) -> HashMap<String, Value> {
+pub fn evaluate_query(row: &HashMap<Value, Value>, query: &Query) -> HashMap<Value, Value> {
     let clauses = match &query.where_clause {
         Some(clauses) => clauses,
         None => return row.clone(),
     };
 
-    let output = row.clone().into_iter().filter(|v| {
-        let mut result = evaluate_clause(v, &clauses[0]);
-
-        for clause in clauses.iter().skip(1) {
-            let clause_result = evaluate_clause(v, clause);
-            match clause.connector {
-                Some(Connector::AND) => result = result && clause_result,
-                Some(Connector::OR) => result = result || clause_result,
-                None => { result = result && clause_result}
-            }
-        }
-
-        result
-    } ).collect();
+    let output = row.clone().into_iter().filter(|v| passes_clauses(v.clone(), clauses) ).collect();
     output
 }
 
-fn evaluate_clause(data: &(String, Value), clause: &WhereClause) -> bool {
-    let left_hand = data.1.get(&clause.left_hand).unwrap_or(&Value::Null);
-    let mut right_hand = match &clause.right_hand {
-        RightHandType::Integer(i) => Value::Number(Number::from(*i)),
-        RightHandType::Float(f) => Value::Number(Number::from_f64(*f).expect("Invalid f64 value")),
-        RightHandType::Boolean(b) => Value::Bool(*b),
-        RightHandType::String(s) => Value::String(s.clone())
+fn passes_clauses(mut v: (Value, Value), clauses: &Vec<WhereClause>) -> bool {
+    let mut result = {
+        evaluate_clause(&mut v, &clauses[0])
     };
-    match clause.operator {
-        Condition::Equals => left_hand == &right_hand,
-        Condition::NotEquals => left_hand != &right_hand,
-        Condition::GreaterThan => compare(left_hand, &right_hand.take(), |l, r| l > r),
-        Condition::LessThan => compare(left_hand, &right_hand.take(), |l, r| l < r),
-        Condition::Invalid => false
+
+    for clause in clauses.iter().skip(1) {
+        let clause_result = evaluate_clause(&mut v, clause);
+        match clause.connector {
+            Some(Connector::AND) => result = result && clause_result,
+            Some(Connector::OR) => result = result || clause_result,
+            None => { result = result && clause_result}
+        }
     }
+
+    result
 }
 
-fn compare(left: &Value, right: &Value, cmp: impl Fn(f64, f64) -> bool) -> bool {
-    if let (Some(l), Some(r)) = (left.as_str().unwrap().parse::<f64>().ok(), right.as_f64()) {
-        cmp(l, r)
-    } else {
-        false
+fn evaluate_clause(data: &mut (Value, Value), clause: &WhereClause) -> bool {
+    let left = data.1.get(&clause.left_hand).unwrap_or(&Value::Null);
+    //let left = &data.1.take();
+    let right = &clause.right_hand;
+    match (left, right) {
+        (Value::Number(l), HandType::Integer(r)) => {
+            let l_i = l.as_i64().unwrap();
+            match clause.operator {
+                Condition::Equals => &l_i == r,
+                Condition::NotEquals => &l_i != r,
+                Condition::GreaterThan => &l_i > r,
+                Condition::LessThan => &l_i < r,
+                Condition::Invalid => false
+            }
+        },
+        (Value::Number(l), HandType::Float(r)) => {
+            let l_f = l.as_f64().unwrap();
+            match clause.operator {
+                Condition::Equals => &l_f == r,
+                Condition::NotEquals => &l_f != r,
+                Condition::GreaterThan => &l_f > r,
+                Condition::LessThan => &l_f < r,
+                Condition::Invalid => false
+            }
+        },
+        (Value::String(l), HandType::String(r)) => {
+            match clause.operator {
+                Condition::Equals => l == r,
+                Condition::NotEquals => l != r,
+                Condition::GreaterThan => l > r,
+                Condition::LessThan => l < r,
+                Condition::Invalid => false
+            }
+        },
+        (Value::Bool(l), HandType::Boolean(r)) => {
+            match clause.operator {
+                Condition::Equals => l == r,
+                Condition::NotEquals => l != r,
+                Condition::GreaterThan => l > r,
+                Condition::LessThan => l < r,
+                Condition::Invalid => false
+            }
+        },
+        (_, _) => {
+            false
+        }
     }
 }
