@@ -1,37 +1,46 @@
 
 use serde_json::{self, Value};
 use std::collections::{HashMap, HashSet};
-use crate::{models::Table, storage::load_from_disk};
+use crate::{models::{FieldDef, Table}, storage::load_from_disk};
 
-pub fn select(query: Vec<String> ) -> (HashMap<Value, Value>, Vec<String>) {
+pub fn select(query: Vec<String>) -> SelectReturn {
     let built_query: Query = build_query(query);
-    let table: Table = load_from_disk(&built_query.from);
+    let mut table: Table = load_from_disk(&built_query.from);
 
-    let mut filtered_store: HashMap<Value, Value> = evaluate_query(&table.data, &built_query);
+    let filtered_store: HashMap<Value, Value> = evaluate_query(&table.data, &built_query);
     if filtered_store.is_empty() {
-        (filtered_store, vec![])
+        SelectReturn { filtered: filtered_store, missing: vec![], schema: vec![] }
     } else {
-        if built_query.select != vec!["*".to_string()] {
-            for (_k, v) in filtered_store.iter_mut() {
-                if let Some(obj) = v.as_object_mut() {
-                    obj.retain(|field_key, _field_value| {
-                        built_query.select.contains(field_key)
-                    })
-                }
-            }
-        }
-
         // List missing fields
         let all_fields: HashSet<String> = table.data.values().filter_map(|v| v.as_object()).flat_map(|obj| obj.keys().cloned()).collect();
         let mut missing_fields: Vec<String> = Vec::new();
         for field in &built_query.select {
-            if !all_fields.contains(field) {
+            if !all_fields.contains(field) && field != &"*".to_string() {
                 missing_fields.push(field.clone());
             }
         }
 
-        (filtered_store, missing_fields)
+        table.schema.sort_by_key(|f| !f.primary_key);
+        let sorted_schema: Vec<(bool, FieldDef)> = table.schema.clone().into_iter().map(|x| -> (bool, FieldDef) {
+            if built_query.select.contains(&x.name) || built_query.select == vec!["*".to_string()]{
+                (true, x)
+            } else {
+                (false, x)
+            }
+        }).collect();
+
+        SelectReturn {
+            filtered: filtered_store,
+            missing: missing_fields,
+            schema: sorted_schema,
+        }
     }
+}
+
+pub struct SelectReturn {
+    pub filtered: HashMap<Value, Value>,
+    pub missing: Vec<String>,
+    pub schema: Vec<(bool, FieldDef)>
 }
 
 pub fn build_query(query_tokens: Vec<String>) -> Query {
@@ -41,7 +50,7 @@ pub fn build_query(query_tokens: Vec<String>) -> Query {
 
     let mut temp_where_tokens: Vec<String> = vec![];
 
-    let mut current_token: TokenOption = TokenOption::CurrentToken(CurrentToken::None);
+    let mut current_token: TokenOption = TokenOption::CurrentToken(CurrentToken::Select);
 
     for q in query_tokens {
         if temp_where_tokens.len() > 3 {
@@ -50,7 +59,6 @@ pub fn build_query(query_tokens: Vec<String>) -> Query {
             finalize_where_clause(&mut temp_where_tokens, &mut where_tokens);
         }
         match q.as_str() {
-            "SELECT" => current_token = TokenOption::CurrentToken(CurrentToken::Select),
             "FROM" => current_token = TokenOption::CurrentToken(CurrentToken::From),
             "WHERE" => current_token = TokenOption::CurrentToken(CurrentToken::Where),
             "AND" => {
@@ -66,7 +74,6 @@ pub fn build_query(query_tokens: Vec<String>) -> Query {
                     TokenOption::CurrentToken(CurrentToken::Select) => select_tokens.push(q),
                     TokenOption::CurrentToken(CurrentToken::From) => from_tokens.push(q),
                     TokenOption::CurrentToken(CurrentToken::Where) => temp_where_tokens.push(q),
-                    _ => {}
                 }
             }
         }
@@ -99,7 +106,6 @@ enum CurrentToken {
     Select,
     From,
     Where,
-    None,
 }
 
 #[derive(Debug)]
