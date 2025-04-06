@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use serde_json::{self, Value};
 use std::collections::HashMap;
+use crate::ddl::alter::alter;
 use crate::ddl::create::{create, CreateData};
 use crate::ddl::drop::drop;
 use crate::dml::delete::delete;
@@ -32,6 +33,11 @@ enum Command {
     },
     Drop {
         name: String,
+    },
+    Alter {
+        table: String,
+        action: String,
+        tokens: Vec<String>,
     },
     Insert {
         table: String,
@@ -65,6 +71,10 @@ pub fn ezpzdb_cli() {
         }
         Cli { command: Some(Command::Drop { name }) } => {
             drop(name);
+        }
+        Cli { command: Some(Command::Alter { table, action, tokens }) } => {
+            let table_data = load_from_disk(&table);
+            alter(table_data, action, tokens);
         }
         Cli { command: Some(Command::Insert { table, tokens }) } => {
             let table_data: Table = load_from_disk(&table);
