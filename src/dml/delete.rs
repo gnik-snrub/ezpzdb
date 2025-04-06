@@ -11,6 +11,7 @@ pub fn delete(mut table: Table, delete_query_tokens: Vec<String>) {
 
     if filtered_store.is_empty() {
         println!("Entry not found");
+        return;
     }
 
     for item in &filtered_store {
