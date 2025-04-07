@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, collections::HashMap};
+use std::cmp::Ordering;
 
 use serde_json::Value;
 
@@ -68,38 +68,38 @@ pub fn alter(mut table: Table, action: String, tokens: Vec<String>) {
             });
 
             // Create updated set of data
-            let mut new_data: HashMap<Value, Value> = HashMap::new();
             for row in &mut rows {
-                match &new_field.data_type {
-                    Some(FieldDataType::TEXT) => {
-                        row.1[&new_field.name] = Value::String("".to_string());
-                    },
-                    Some(FieldDataType::NUMBER) => {
-                        row.1[&new_field.name] = Value::Number(0.into());
-                    },
-                    Some(FieldDataType::BOOLEAN) => {
-                        row.1[&new_field.name] = Value::Bool(false);
-                    },
-                    Some(FieldDataType::SERIAL) => {
-                        match new_field.serial.as_mut() {
-                            Some(next) => {
-                                let curr = next.next_val;
-                                next.next_val += 1;
-                                if new_field.primary_key {
+                if let Value::Object(map) = row.1 {
+                    match &new_field.data_type {
+                        Some(FieldDataType::TEXT) => {
+                            map.insert(new_field.name.clone(), Value::String("".to_string()));
+                        },
+                        Some(FieldDataType::NUMBER) => {
+                            map.insert(new_field.name.clone(), Value::Number(0.into()));
+                        },
+                        Some(FieldDataType::BOOLEAN) => {
+                            map.insert(new_field.name.clone(), Value::Bool(false));
+                        },
+                        Some(FieldDataType::SERIAL) => {
+                            match new_field.serial.as_mut() {
+                                Some(next) => {
+                                    let curr = next.next_val;
+                                    next.next_val += 1;
+                                    if new_field.primary_key {
+                                        map.insert(new_field.name.clone(), Value::from(curr));
+                                    }
                                     row.1[&new_field.name] = Value::from(curr);
-                                }
-                                row.1[&new_field.name] = Value::from(curr);
-                            },
-                            None => {eprintln!("Error: SerialState not found");}
-                        }
-                    },
-                    None => {}
+                                },
+                                None => {eprintln!("Error: SerialState not found");}
+                            }
+                        },
+                        None => {}
+                    }
                 }
-                new_data.insert(row.0.clone(), row.1.clone());
             }
 
             // Write new table to disk
-            table.data = new_data;
+            println!("Adding {} column", col_name);
             save_to_disk(&table.name, &table);
         },
         "modify" | "MODIFY" => {
