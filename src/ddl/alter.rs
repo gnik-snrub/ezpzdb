@@ -1,8 +1,8 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, collections::HashMap};
 
 use serde_json::Value;
 
-use crate::models::{FieldDataType, FieldDef, SerialState, Table};
+use crate::{models::{FieldDataType, FieldDef, SerialState, Table}, storage::save_to_disk};
 
 
 pub fn alter(mut table: Table, action: String, tokens: Vec<String>) {
@@ -11,7 +11,7 @@ pub fn alter(mut table: Table, action: String, tokens: Vec<String>) {
         "add" | "ADD" => {
             let field_names: Vec<&String> = table.schema.iter().map(|f| &f.name).collect();
             let col_name = &tokens[0];
-            let col_type = &tokens[1];
+            let col_type = &tokens[1].to_uppercase();
             // 1 - Check to see if new column already in table
             // 2 - If exists, early return
             if field_names.contains(&&col_name) {
@@ -20,7 +20,7 @@ pub fn alter(mut table: Table, action: String, tokens: Vec<String>) {
             }
 
             // 3 - If not exists, add new column to schema
-            let new_field = FieldDef {
+            let mut new_field = FieldDef {
                 name: col_name.clone(),
                 data_type: match col_type.as_str() {
                     "TEXT" => Some(FieldDataType::TEXT),
@@ -36,10 +36,10 @@ pub fn alter(mut table: Table, action: String, tokens: Vec<String>) {
                     None
                 }
             };
-            table.schema.push(new_field);
+            table.schema.push(new_field.clone());
 
-            // 4 - Loop through rows, ordered by primary key
-            let mut rows: Vec<(&Value, &Value)> = table.data.iter().map(|f| (f.0, f.1)).collect();
+            // 4 - Sort rows, ordered by primary key
+            let mut rows: Vec<(&Value, &mut Value)> = table.data.iter_mut().map(|f| (f.0, f.1)).collect();
             rows.sort_by(|c, n| {
                 match (c.0, n.0) {
                     (Value::Number(curr), Value::Number(next)) => {
@@ -66,15 +66,54 @@ pub fn alter(mut table: Table, action: String, tokens: Vec<String>) {
                     _ => { Ordering::Equal }
                 }
             });
-            for row in rows {
-                // 4 - a - Add field to row
-                // 4 - b - Set default value for column, based on type
-                // DEFAULTS: 
-                //  TEXT = ""
-                //  NUMBER = 0
-                //  BOOLEAN = false
-                //  SERIAL = { add next_val in order }
+
+            // Create updated set of data
+            let mut new_data: HashMap<Value, Value> = HashMap::new();
+            for row in &mut rows {
+                match &new_field.data_type {
+                    Some(FieldDataType::TEXT) => {
+                        row.1[&new_field.name] = Value::String("".to_string());
+                    },
+                    Some(FieldDataType::NUMBER) => {
+                        row.1[&new_field.name] = Value::Number(0.into());
+                    },
+                    Some(FieldDataType::BOOLEAN) => {
+                        row.1[&new_field.name] = Value::Bool(false);
+                    },
+                    Some(FieldDataType::SERIAL) => {
+                        match new_field.serial.as_mut() {
+                            Some(next) => {
+                                let curr = next.next_val;
+                                next.next_val += 1;
+                                if new_field.primary_key {
+                                    row.1[&new_field.name] = Value::from(curr);
+                                }
+                                row.1[&new_field.name] = Value::from(curr);
+                            },
+                            None => {eprintln!("Error: SerialState not found");}
+                        }
+                    },
+                    None => {}
+                }
+                new_data.insert(row.0.clone(), row.1.clone());
             }
+
+            // Write new table to disk
+            table.data = new_data;
+            save_to_disk(&table.name, &table);
         },
+        "modify" | "MODIFY" => {
+            println!("modify");
+        },
+        "drop" | "DROP" => {
+            println!("drop");
+        },
+        "rename" | "RENAME" => {
+            println!("rename");
+        },
+        _ => {
+            println!("not found");
+        }
     }
+
 }
