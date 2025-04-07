@@ -106,7 +106,32 @@ pub fn alter(mut table: Table, action: String, tokens: Vec<String>) {
             println!("modify");
         },
         "drop" | "DROP" => {
-            println!("drop");
+            let col_name = &tokens[0];
+
+            let primary_key_name = table.schema.iter().find(|f| f.primary_key);
+            if let Some(key) = primary_key_name {
+                if &key.name == col_name {
+                    println!("Cannot drop primary key");
+                    return;
+                }
+            }
+
+            let col_index = table.schema.iter().position(|f| &f.name == col_name);
+            if let Some(i) = col_index {
+                table.schema.remove(i);
+            } else {
+                println!("Column not found");
+                return;
+            }
+
+            for row in table.data.iter_mut() {
+                if let Value::Object(map) = row.1 {
+                    map.remove(col_name);
+                }
+            }
+
+            println!("Dropping {} column", col_name);
+            save_to_disk(&table.name, &table);
         },
         "rename" | "RENAME" => {
             println!("rename");
