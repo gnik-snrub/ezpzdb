@@ -134,7 +134,31 @@ pub fn alter(mut table: Table, action: String, tokens: Vec<String>) {
             save_to_disk(&table.name, &table);
         },
         "rename" | "RENAME" => {
-            println!("rename");
+            if tokens.len() <= 1 {
+                println!("Missing parameters");
+                return;
+            }
+
+            let col_name = &tokens[0];
+            let new_name = &tokens[1];
+
+            let col_index = table.schema.iter().position(|f| &f.name == col_name);
+            if let Some(i) = col_index {
+                table.schema[i].name = new_name.clone();
+            } else {
+                println!("Column not found");
+                return;
+            }
+
+            for row in table.data.iter_mut() {
+                if let Value::Object(map) = row.1 {
+                    let val = map.get(col_name).unwrap();
+                    map.insert(new_name.clone(), val.clone());
+                    map.remove(col_name);
+                }
+            }
+            println!("Renamed column {} to {}", col_name, new_name);
+            save_to_disk(&table.name, &table);
         },
         _ => {
             println!("not found");
