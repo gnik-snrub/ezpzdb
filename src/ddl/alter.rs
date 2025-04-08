@@ -9,6 +9,11 @@ pub fn alter(mut table: Table, action: String, tokens: Vec<String>) {
 
     match action.as_str() {
         "add" | "ADD" => {
+            if tokens.len() <= 1 {
+                println!("Missing parameters");
+                return;
+            }
+
             let field_names: Vec<&String> = table.schema.iter().map(|f| &f.name).collect();
             let col_name = &tokens[0];
             let col_type = &tokens[1].to_uppercase();
@@ -106,6 +111,11 @@ pub fn alter(mut table: Table, action: String, tokens: Vec<String>) {
             println!("modify");
         },
         "drop" | "DROP" => {
+            if tokens.len() <= 0 {
+                println!("Missing parameters");
+                return;
+            }
+
             let col_name = &tokens[0];
 
             let primary_key_name = table.schema.iter().find(|f| f.primary_key);
