@@ -19,7 +19,6 @@ pub fn insert(mut table: Table, new_data_tokens: Vec<String>) {
     let json_row: serde_json::Map<String, Value> = new_row.into_iter().collect();
     table.data.insert(new_key, Value::Object(json_row));
     save_to_disk(&table.name, &table);
-
 }
 
 fn generate_row_data(schema: &mut Vec<FieldDef>, new_data_tokens: Vec<String>) -> (Value, HashMap<String, Value>) {

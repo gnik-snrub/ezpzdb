@@ -108,7 +108,141 @@ pub fn alter(mut table: Table, action: String, tokens: Vec<String>) {
             save_to_disk(&table.name, &table);
         },
         "modify" | "MODIFY" => {
-            println!("modify");
+            if tokens.len() <= 1 {
+                println!("Missing parameters");
+                return;
+            }
+
+            let col_name = &tokens[0];
+            let new_type = &tokens[1];
+
+            let col_index = table.schema.iter().position(|f| &f.name == col_name);
+            if let Some(i) = col_index {
+                match new_type.as_str() {
+                    "TEXT" => {
+                        if table.schema[i].data_type == Some(FieldDataType::TEXT) {
+                            println!("Schema field {} already set to TEXT", col_name);
+                            return;
+                        } else {
+                            table.schema[i].data_type = Some(FieldDataType::TEXT);
+                        }
+                    },
+                    "NUMBER" => {
+                        if table.schema[i].data_type == Some(FieldDataType::NUMBER) {
+                            println!("Schema field {} already set to NUMBER", col_name);
+                            return;
+                        } else {
+                            table.schema[i].data_type = Some(FieldDataType::NUMBER);
+                        }
+                    },
+                    "BOOLEAN" => {
+                        if table.schema[i].data_type == Some(FieldDataType::BOOLEAN) {
+                            println!("Schema field {} already set to BOOLEAN", col_name);
+                            return;
+                        } else {
+                            table.schema[i].data_type = Some(FieldDataType::BOOLEAN);
+                        }
+                    },
+                    "SERIAL" => {
+                        if table.schema[i].data_type == Some(FieldDataType::SERIAL) {
+                            println!("Schema field {} already set to SERIAL", col_name);
+                            return;
+                        } else {
+                            table.schema[i].data_type = Some(FieldDataType::SERIAL);
+                        }
+                    },
+                    _ => {
+                        println!("{} is an invalid data type", new_type);
+                        return;
+                    }
+                }
+                if new_type.as_str() == "SERIAL" {
+                    table.schema[i].serial = Some(SerialState { next_val: 1 });
+                }
+            } else {
+                println!("Column not found");
+            }
+
+            let mut rows: Vec<(&Value, &mut Value)> = table.data.iter_mut().map(|f| (f.0, f.1)).collect();
+            rows.sort_by(|c, n| {
+                match (c.0, n.0) {
+                    (Value::Number(curr), Value::Number(next)) => {
+                        let curr_i = curr.as_f64().unwrap();
+                        let next_i = next.as_f64().unwrap();
+                        if curr_i < next_i {
+                            Ordering::Less
+                        } else {
+                            Ordering::Greater
+                        }
+                    },
+                    (Value::String(curr), Value::String(next)) => {
+                        curr.cmp(next)
+                    },
+                    (Value::Bool(curr), Value::Bool(next)) => {
+                        if *curr && !next {
+                            Ordering::Greater
+                        } else if !curr && *next {
+                            Ordering::Less
+                        } else {
+                            Ordering::Equal
+                        }
+                    },
+                    _ => { Ordering::Equal }
+                }
+            });
+
+            // Create updated set of data
+            for row in &mut rows {
+                if let (Some(map), Some(i)) = (row.1.as_object_mut(), col_index) {
+                    if table.schema[i].data_type.is_none() {
+                        println!("Error in columns existing data type");
+                        return;
+                    }
+                    let field = &mut table.schema[i];
+                    let val = map.get_mut(&field.name);
+                    match field.data_type {
+                        Some(FieldDataType::TEXT) => {
+                            if let Some(v) = &val {
+                                map[&field.name] = Value::String(v.to_string().trim().to_string());
+                            }
+                        },
+                        Some(FieldDataType::NUMBER) => {
+                            if let Some(v) = &val {
+                                if v.to_string().parse::<i64>().is_ok() {
+                                    map[&field.name] = Value::Number(v.to_string().parse::<i64>().unwrap().into());
+                                } else {
+                                    map[&field.name] = Value::Number(0.into());
+                                }
+                            }
+                        },
+                        Some(FieldDataType::BOOLEAN) => {
+                            if let Value::String(v) = &val.unwrap() {
+                                if v.to_string().parse::<bool>().is_ok() {
+                                    map[&field.name] = Value::Bool(v.to_string().parse::<bool>().unwrap());
+                                } else {
+                                    map[&field.name] = Value::Bool(false);
+                                }
+                            }
+                        },
+                        Some(FieldDataType::SERIAL) => {
+                            match field.serial.as_mut() {
+                                Some(next) => {
+                                    let curr = next.next_val;
+                                    next.next_val += 1;
+                                    if field.primary_key {
+                                        map.insert(field.name.clone(), Value::from(curr));
+                                    }
+                                    row.1[&field.name] = Value::from(curr);
+                                },
+                                None => {eprintln!("Error: SerialState not found");}
+                            }
+                        },
+                        None => {}
+                    }
+                }
+            }
+            println!("Modified column {} to use {} data type", col_name, new_type);
+            save_to_disk(&table.name, &table);
         },
         "drop" | "DROP" => {
             if tokens.len() <= 0 {
