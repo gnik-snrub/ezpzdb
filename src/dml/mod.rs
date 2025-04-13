@@ -2,5 +2,4 @@ pub mod insert;
 
 pub mod delete;
 
-//TODO
-//pub mod update;
+pub mod update;

@@ -6,6 +6,7 @@ use crate::ddl::create::{create, CreateData};
 use crate::ddl::drop::drop;
 use crate::dml::delete::delete;
 use crate::dml::insert::insert;
+use crate::dml::update::update;
 use crate::dql::select::select;
 use crate::models::{FieldDef, Table};
 use crate::storage::load_from_disk;
@@ -47,6 +48,10 @@ enum Command {
         table: String,
         tokens: Vec<String>,
     },
+    Update {
+        table: String,
+        tokens: Vec<String>,
+    }
 }
 
 
@@ -83,6 +88,10 @@ pub fn ezpzdb_cli() {
         Cli { command: Some(Command::Delete { table, tokens }) } => {
             let table_data: Table = load_from_disk(&table);
             delete(table_data, tokens);
+        }
+        Cli { command: Some(Command::Update { table, tokens }) } => {
+            let table_data: Table = load_from_disk(&table);
+            update(table_data, tokens);
         }
         _ => {
             println!("No command provided");
