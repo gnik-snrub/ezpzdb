@@ -208,23 +208,47 @@ fn evaluate_clause(data: &mut (Value, Value), clause: &WhereClause) -> bool {
     let right = &clause.right_hand;
     match (left, right) {
         (Value::Number(l), HandType::Integer(r)) => {
-            let l_i = l.as_i64().unwrap();
-            match clause.operator {
-                Condition::Equals => &l_i == r,
-                Condition::NotEquals => &l_i != r,
-                Condition::GreaterThan => &l_i > r,
-                Condition::LessThan => &l_i < r,
-                Condition::Invalid => false
+            if let Some(l_i) = l.as_i64() {
+                match clause.operator {
+                    Condition::Equals => &l_i == r,
+                    Condition::NotEquals => &l_i != r,
+                    Condition::GreaterThan => &l_i > r,
+                    Condition::LessThan => &l_i < r,
+                    Condition::Invalid => false
+                }
+            } else if let Some(l_f) = l.as_f64() {
+                let r_f = *r as f64;
+                match clause.operator {
+                    Condition::Equals => l_f == r_f,
+                    Condition::NotEquals => l_f != r_f,
+                    Condition::GreaterThan => l_f > r_f,
+                    Condition::LessThan => l_f < r_f,
+                    Condition::Invalid => false
+                }
+            } else {
+                return false
             }
         },
         (Value::Number(l), HandType::Float(r)) => {
-            let l_f = l.as_f64().unwrap();
-            match clause.operator {
-                Condition::Equals => &l_f == r,
-                Condition::NotEquals => &l_f != r,
-                Condition::GreaterThan => &l_f > r,
-                Condition::LessThan => &l_f < r,
-                Condition::Invalid => false
+            if let Some(l_i) = l.as_f64() {
+                match clause.operator {
+                    Condition::Equals => &l_i == r,
+                    Condition::NotEquals => &l_i != r,
+                    Condition::GreaterThan => &l_i > r,
+                    Condition::LessThan => &l_i < r,
+                    Condition::Invalid => false
+                }
+            } else if let Some(l_f) = l.as_i64() {
+                let r_f = *r as i64;
+                match clause.operator {
+                    Condition::Equals => l_f == r_f,
+                    Condition::NotEquals => l_f != r_f,
+                    Condition::GreaterThan => l_f > r_f,
+                    Condition::LessThan => l_f < r_f,
+                    Condition::Invalid => false
+                }
+            } else {
+                return false
             }
         },
         (Value::String(l), HandType::String(r)) => {
