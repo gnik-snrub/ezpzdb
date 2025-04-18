@@ -1,7 +1,7 @@
 use std::{collections::{HashMap, VecDeque}, fs::write};
 use directories::UserDirs;
 
-use crate::models::{FieldDataType, FieldDef, SerialState, Table};
+use crate::models::{FieldDataType, FieldDef, Index, SerialState, Table};
 
 pub enum CreateData {
     Table { name: String, schema: Vec<String> },
@@ -19,7 +19,7 @@ pub fn create(create_data: CreateData) {
                 let path = dirs.home_dir().join("Documents/ezpzdb/").join(file_name);
 
                 let fields = generate_schema(schema.clone().into());
-                let new_table = Table { name, schema: fields, data: HashMap::new()};
+                let new_table = Table { name, schema: fields, data: HashMap::new(), indexes: HashMap::new()};
                 let schema_json = serde_json::to_string_pretty(&new_table);
                 match schema_json {
                     Ok(sj) => {

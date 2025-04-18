@@ -32,7 +32,8 @@ pub fn load_from_disk(table: &String) -> Table {
                     Table {
                         name: "".to_string(),
                         schema: vec![],
-                        data: HashMap::new()
+                        data: HashMap::new(),
+                        indexes: HashMap::new(),
                     }
                 }
             },
@@ -41,7 +42,8 @@ pub fn load_from_disk(table: &String) -> Table {
                 Table {
                     name: "".to_string(),
                     schema: vec![],
-                    data: HashMap::new()
+                    data: HashMap::new(),
+                    indexes: HashMap::new(),
                 }
             }
         }
@@ -50,7 +52,8 @@ pub fn load_from_disk(table: &String) -> Table {
         Table {
             name: "".to_string(),
             schema: vec![],
-            data: HashMap::new()
+            data: HashMap::new(),
+            indexes: HashMap::new(),
         }
     }
 }
