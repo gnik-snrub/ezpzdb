@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use rustyline::DefaultEditor;
 use serde_json::{self, Value};
 use std::collections::HashMap;
 use crate::ddl::alter::alter;
@@ -56,9 +57,37 @@ enum Command {
 
 
 pub fn ezpzdb_cli() {
-    let cli = Cli::parse();
+    let init: Vec<_> = std::env::args().collect();
+    if init.len() <= 1 {
+        let mut rl = DefaultEditor::new().unwrap();
+        let exit_command = "quit".to_string();
+        println!();
+        println!("Welcome to the EZPZDB REPL interface!");
+        println!();
+        loop {
+            let readline = rl.readline(">> ").unwrap();
+            if readline.trim().is_empty() { continue }
+            let splits: Vec<&str> = readline.split(" ").collect();
+            if readline == exit_command {
+                break;
+            } else {
+                let mut tokens = Vec::new();
+                tokens.push("REPL");
+                tokens.extend(splits);
+                let cli = Cli::try_parse_from(tokens);
+                if let Ok(valid) = cli {
+                    run_command(valid);
+                    println!();
+                }
+            }
+        }
+    } else {
+        run_command(Cli::parse());
+    }
+}
 
-    match cli {
+fn run_command(tokens: Cli) {
+    match tokens {
         Cli { command: Some(Command::Select { query }) } => {
             let select_results = select(query);
             if select_results.filtered.is_empty() {

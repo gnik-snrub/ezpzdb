@@ -1,7 +1,7 @@
 use std::{collections::{HashMap, VecDeque}, fs::write};
 use directories::UserDirs;
 
-use crate::models::{FieldDataType, FieldDef, Index, SerialState, Table};
+use crate::models::{FieldDataType, FieldDef, SerialState, Table};
 
 pub enum CreateData {
     Table { name: String, schema: Vec<String> },
