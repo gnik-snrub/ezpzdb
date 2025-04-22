@@ -29,9 +29,9 @@ enum Command {
         query: Vec<String>,
     },
     Create {
-        name: String,
+        create_type: String,
         #[arg(trailing_var_arg = true, num_args(1..))]
-        schema: Vec<String>,
+        tokens: Vec<String>,
     },
     Drop {
         name: String,
@@ -100,8 +100,22 @@ fn run_command(tokens: Cli) {
                 }
             }
         }
-        Cli { command: Some(Command::Create { name, schema }) } => {
-            create(CreateData::Table {name, schema});
+        Cli { command: Some(Command::Create { create_type, mut tokens }) } => {
+            let create_data: CreateData;
+            let other_tokens = &tokens.split_off(1);
+            match create_type.as_str() {
+                "TABLE" | "table" => {
+                    create_data = CreateData::Table { name: tokens[0].clone(), schema: other_tokens.clone() };
+                },
+                "INDEX" | "index" => {
+                    create_data = CreateData::Index { table: tokens[0].clone(), column: other_tokens[0].clone() };
+                },
+                _ => {
+                    println!("Invalid create type entered");
+                    return;
+                }
+            }
+            create(create_data);
         }
         Cli { command: Some(Command::Drop { name }) } => {
             drop(name);

@@ -15,8 +15,7 @@ pub struct Table {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Index {
-    pub name: String,
-    pub field_name: String,
+    pub indexed_column: String,
     pub index_type: FieldDataType,
     pub index_data: IndexStore,
 }
