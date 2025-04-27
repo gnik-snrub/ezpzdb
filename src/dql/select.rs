@@ -1,9 +1,8 @@
-
-use serde_json::{self, Value};
+use serde_json::{self, Value, Number};
 use std::collections::{HashMap, HashSet};
 use std::ops::Bound::{Excluded, Unbounded};
 use crate::models::IndexNumber;
-use crate::{models::{FieldDef, Index, IndexStore, Table}, storage::load_from_disk};
+use crate::{models::{FieldDef, IndexStore, Table}, storage::load_from_disk};
 
 pub fn select(query: Vec<String>) -> SelectReturn {
     let built_query: Query = build_query(query);
@@ -186,7 +185,82 @@ pub fn evaluate_query(table: &Table, query: &Query) -> HashMap<Value, Value> {
 
     match index {
         Some(i) => {
-            match i.1 {
+            match &i.1 {
+                &IndexStore::Text(map) => {
+                    let mut found_items: Vec<(Value, Value)> = vec![];
+                    for (key, items) in map.iter() {
+                        for item in items {
+                            let val = Value::String(key.to_string());
+                            found_items.push((val.clone(), item.clone()));
+                        }
+                    }
+                    let collection: HashMap<Value, Value> = found_items.into_iter()
+                        .map(|(k, v)| (v.clone(), k.clone()))
+                        .filter(|(k, v)| passes_clauses((v.clone(), k.clone()), clauses))
+                        .collect();
+                    let mut output: HashMap<Value, Value> = HashMap::new();
+                    for item in &collection {
+                        if let Some(unwrapped) = table.data.get(&item.0) {
+                            output.insert(item.0.clone(), unwrapped.clone());
+                        }
+                    }
+                    output
+                },
+                &IndexStore::Number(map) => {
+                    let mut found_items: Vec<(Value, Value)> = vec![];
+                    for (key, items) in map.iter() {
+                        for item in items {
+                            match key {
+                                IndexNumber::Int(i) => {
+                                    if let Some(int) = Number::from_i128(*i as i128) {
+                                        let val = Value::Number(int);
+                                        found_items.push((val.clone(), item.clone()))
+                                    }
+                                },
+                                IndexNumber::Float(f) => {
+                                    if let Some(float) = Number::from_f64(f.0) {
+                                        let val = Value::Number(float);
+                                        found_items.push((val.clone(), item.clone()))
+                                    } else {
+                                        println!("Error: Invalid f64 value in index: {:?}", f.0);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    let collection: HashMap<Value, Value> = found_items.into_iter()
+                        .map(|(k, v)| (v.clone(), k.clone()))
+                        .filter(|(k, v)| passes_clauses((v.clone(), k.clone()), clauses))
+                        .collect();
+                    let mut output: HashMap<Value, Value> = HashMap::new();
+                    for item in &collection {
+                        if let Some(unwrapped) = table.data.get(&item.0) {
+                            output.insert(item.0.clone(), unwrapped.clone());
+                        }
+                    }
+                    output
+                },
+                &IndexStore::Boolean(map) => {
+                    let mut found_items: Vec<(Value, Value)> = vec![];
+                    for (key, items) in map.iter() {
+                        for item in items {
+                            let val = Value::Bool(*key);
+                            found_items.push((val.clone(), item.clone()));
+                        }
+                    }
+
+                    let collection: HashMap<Value, Value> = found_items.into_iter()
+                        .map(|(k, v)| (v.clone(), k.clone()))
+                        .filter(|(k, v)| passes_clauses((v.clone(), k.clone()), clauses))
+                        .collect();
+                    let mut output: HashMap<Value, Value> = HashMap::new();
+                    for item in &collection {
+                        if let Some(unwrapped) = table.data.get(&item.0) {
+                            output.insert(item.0.clone(), unwrapped.clone());
+                        }
+                    }
+                    output
+                }
             }
         },
         None => {
@@ -379,7 +453,8 @@ fn passes_clauses(mut v: (Value, Value), clauses: &Vec<WhereClause>) -> bool {
 }
 
 fn evaluate_clause(data: &mut (Value, Value), clause: &WhereClause) -> bool {
-    let left = data.1.get(&clause.left_hand).unwrap_or(&Value::Null);
+    //let left = data.1.get(&clause.left_hand).unwrap_or(&Value::Null);
+    let left = data.0.clone();
     //let left = &data.1.take();
     let right = &clause.right_hand;
     match (left, right) {
@@ -425,18 +500,18 @@ fn evaluate_clause(data: &mut (Value, Value), clause: &WhereClause) -> bool {
         },
         (Value::String(l), HandType::String(r)) => {
             match clause.operator {
-                Condition::Equals => l == r,
-                Condition::NotEquals => l != r,
-                Condition::GreaterThan => l > r,
-                Condition::LessThan => l < r,
+                Condition::Equals => *l == *r,
+                Condition::NotEquals => *l != *r,
+                Condition::GreaterThan => l > *r,
+                Condition::LessThan => l < *r,
             }
         },
         (Value::Bool(l), HandType::Boolean(r)) => {
             match clause.operator {
-                Condition::Equals => l == r,
-                Condition::NotEquals => l != r,
-                Condition::GreaterThan => l > r,
-                Condition::LessThan => l < r,
+                Condition::Equals => l == *r,
+                Condition::NotEquals => l != *r,
+                Condition::GreaterThan => l > *r,
+                Condition::LessThan => l < *r,
             }
         },
         (_, _) => {
