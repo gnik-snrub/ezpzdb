@@ -1,13 +1,15 @@
 
 use serde_json::{self, Value};
 use std::collections::{HashMap, HashSet};
-use crate::{models::{FieldDef, Table}, storage::load_from_disk};
+use std::ops::Bound::{Excluded, Unbounded};
+use crate::models::IndexNumber;
+use crate::{models::{FieldDef, Index, IndexStore, Table}, storage::load_from_disk};
 
 pub fn select(query: Vec<String>) -> SelectReturn {
     let built_query: Query = build_query(query);
     let mut table: Table = load_from_disk(&built_query.from);
 
-    let filtered_store: HashMap<Value, Value> = evaluate_query(&table.data, &built_query);
+    let filtered_store: HashMap<Value, Value> = evaluate_query(&table, &built_query);
     if filtered_store.is_empty() {
         SelectReturn { filtered: filtered_store, missing: vec![], schema: vec![] }
     } else {
@@ -132,7 +134,7 @@ fn build_where_clause(mut where_tokens: Vec<String>) -> WhereClause {
             Some("!=") => Condition::NotEquals,
             Some(">") => Condition::GreaterThan,
             Some("<") => Condition::LessThan,
-            _ => Condition::Invalid
+            None | Some(_) => Condition::Equals,
         },
         right_hand: match where_tokens.get(2) {
             Some(t) if t.parse::<i32>().is_ok() => HandType::Integer(i64::from(t.parse::<i64>().unwrap())),
@@ -172,17 +174,191 @@ enum Condition {
     NotEquals,
     GreaterThan,
     LessThan,
-    Invalid
 }
 
-pub fn evaluate_query(row: &HashMap<Value, Value>, query: &Query) -> HashMap<Value, Value> {
+pub fn evaluate_query(table: &Table, query: &Query) -> HashMap<Value, Value> {
     let clauses = match &query.where_clause {
         Some(clauses) => clauses,
-        None => return row.clone(),
+        None => return table.data.clone(),
     };
 
-    let output = row.clone().into_iter().filter(|v| passes_clauses(v.clone(), clauses) ).collect();
-    output
+    let index = find_best_index(table, clauses);
+
+    match index {
+        Some(i) => {
+            match i.1 {
+            }
+        },
+        None => {
+            let output = table.data.clone().into_iter().filter(|v| passes_clauses(v.clone(), clauses) ).collect();
+            output
+        }
+    }
+}
+
+fn find_best_index<'a>(table: &'a Table, clauses: &'a Vec<WhereClause>) -> Option<(&'a WhereClause, &'a IndexStore)> {
+    let mut best: Option<(&WhereClause, &IndexStore, usize)> = None;
+
+    for clause in clauses {
+        if let Some(index) = table.indexes.get(&clause.left_hand) {
+            let hits = count_hits(&index.index_data, clause);
+
+            if best.map_or(true, |(_, _, best_hits)| hits < best_hits) {
+                best = Some((clause, &index.index_data, hits));
+            }
+        }
+    }
+    best.map(|(clause, index, _)| (clause, index))
+}
+
+fn count_hits(index: &IndexStore, clause: &WhereClause) -> usize {
+    match index {
+        IndexStore::Text(map) => {
+            match &clause.right_hand {
+                HandType::String(right) => {
+                    match clause.operator {
+                        Condition::Equals => {
+                            map.get(right).map_or(0, |rows| rows.len())
+                        },
+                        Condition::NotEquals => {
+                            // Copied from Equals, I will change this to make sense for its arm.
+                            map.iter()
+                                .filter(|(k, _)| *k != right)
+                                .map(|(_, v)| v.len())
+                                .sum::<usize>();
+                            map.get(right).map_or(0, |rows| rows.len())
+                        },
+                        Condition::GreaterThan => {
+                            map.range::<String, _>((Excluded(right), Unbounded))
+                                .map(|(_, v)| v.len())
+                                .sum::<usize>()
+                        },
+                        Condition::LessThan => {
+                            map.range::<String, _>((Unbounded, Excluded(right)))
+                                .map(|(_, v)| v.len())
+                                .sum::<usize>()
+                        }
+                    }
+                },
+                _ => {
+                    println!("Error: WHERE condition does not match index data type");
+                    return 0;
+                }
+            }
+        },
+        IndexStore::Boolean(map) => {
+            match &clause.right_hand {
+                HandType::Boolean(right) => {
+                    match clause.operator {
+                        Condition::Equals => {
+                            map.get(right).map_or(0, |rows| rows.len())
+                        },
+                        Condition::NotEquals => {
+                            map.iter()
+                                .filter(|(k, _)| k != &right)
+                                .map(|(_, v)| v.len())
+                                .sum()
+                        },
+                        _ => {0},
+                    }
+                },
+                _ => {
+                    println!("Error: WHERE condition does not match index data type");
+                    return 0;
+                }
+            }
+        },
+        IndexStore::Number(map) => {
+            match &clause.right_hand {
+                HandType::Integer(i) => {
+                    let cmp_val = *i as f64;
+                    match clause.operator {
+                        Condition::Equals => {
+                            map.iter().filter(|(k, _)| {
+                                match k {
+                                    IndexNumber::Int(i) => (*i as f64) == cmp_val,
+                                    IndexNumber::Float(f) => f.0 == cmp_val,
+                                }
+                            }).map(|(_, v)| v.len())
+                                .sum::<usize>()
+                        },
+                        Condition::NotEquals => {
+                            map.iter().filter(|(k, _)| {
+                                match k {
+                                    IndexNumber::Int(i) => (*i as f64) != cmp_val,
+                                    IndexNumber::Float(f) => f.0 != cmp_val,
+                                }
+                            }).map(|(_, v)| v.len())
+                                .sum::<usize>()
+                        },
+                        Condition::GreaterThan => {
+                            map.iter().filter(|(k, _)| {
+                                match k {
+                                    IndexNumber::Int(i) => (*i as f64) > cmp_val,
+                                    IndexNumber::Float(f) => f.0 > cmp_val,
+                                }
+                            }).map(|(_, v)| v.len())
+                                .sum::<usize>()
+                        },
+                        Condition::LessThan => {
+                            map.iter().filter(|(k, _)| {
+                                match k {
+                                    IndexNumber::Int(i) => (*i as f64) < cmp_val,
+                                    IndexNumber::Float(f) => f.0 < cmp_val,
+                                }
+                            }).map(|(_, v)| v.len())
+                                .sum::<usize>()
+                        },
+                    }
+                },
+                HandType::Float(f) => {
+                    let cmp_val = *f;
+                    match clause.operator {
+                        Condition::Equals => {
+                            map.iter().filter(|(k, _)| {
+                                match k {
+                                    IndexNumber::Int(i) => (*i as f64) == cmp_val,
+                                    IndexNumber::Float(f) => f.0 == cmp_val,
+                                }
+                            }).map(|(_, v)| v.len())
+                                .sum::<usize>()
+                        },
+                        Condition::NotEquals => {
+                            map.iter().filter(|(k, _)| {
+                                match k {
+                                    IndexNumber::Int(i) => (*i as f64) != cmp_val,
+                                    IndexNumber::Float(f) => f.0 != cmp_val,
+                                }
+                            }).map(|(_, v)| v.len())
+                                .sum::<usize>()
+                        },
+                        Condition::GreaterThan => {
+                            map.iter().filter(|(k, _)| {
+                                match k {
+                                    IndexNumber::Int(i) => (*i as f64) > cmp_val,
+                                    IndexNumber::Float(f) => f.0 > cmp_val,
+                                }
+                            }).map(|(_, v)| v.len())
+                                .sum::<usize>()
+                        },
+                        Condition::LessThan => {
+                            map.iter().filter(|(k, _)| {
+                                match k {
+                                    IndexNumber::Int(i) => (*i as f64) < cmp_val,
+                                    IndexNumber::Float(f) => f.0 < cmp_val,
+                                }
+                            }).map(|(_, v)| v.len())
+                                .sum::<usize>()
+                        },
+                    }
+                },
+                _ => {
+                    println!("Error: WHERE condition does not match index data type");
+                    return 0;
+                }
+            }
+        },
+    }
 }
 
 fn passes_clauses(mut v: (Value, Value), clauses: &Vec<WhereClause>) -> bool {
@@ -214,7 +390,6 @@ fn evaluate_clause(data: &mut (Value, Value), clause: &WhereClause) -> bool {
                     Condition::NotEquals => &l_i != r,
                     Condition::GreaterThan => &l_i > r,
                     Condition::LessThan => &l_i < r,
-                    Condition::Invalid => false
                 }
             } else if let Some(l_f) = l.as_f64() {
                 let r_f = *r as f64;
@@ -223,7 +398,6 @@ fn evaluate_clause(data: &mut (Value, Value), clause: &WhereClause) -> bool {
                     Condition::NotEquals => l_f != r_f,
                     Condition::GreaterThan => l_f > r_f,
                     Condition::LessThan => l_f < r_f,
-                    Condition::Invalid => false
                 }
             } else {
                 return false
@@ -236,7 +410,6 @@ fn evaluate_clause(data: &mut (Value, Value), clause: &WhereClause) -> bool {
                     Condition::NotEquals => &l_i != r,
                     Condition::GreaterThan => &l_i > r,
                     Condition::LessThan => &l_i < r,
-                    Condition::Invalid => false
                 }
             } else if let Some(l_f) = l.as_i64() {
                 let r_f = *r as i64;
@@ -245,7 +418,6 @@ fn evaluate_clause(data: &mut (Value, Value), clause: &WhereClause) -> bool {
                     Condition::NotEquals => l_f != r_f,
                     Condition::GreaterThan => l_f > r_f,
                     Condition::LessThan => l_f < r_f,
-                    Condition::Invalid => false
                 }
             } else {
                 return false
@@ -257,7 +429,6 @@ fn evaluate_clause(data: &mut (Value, Value), clause: &WhereClause) -> bool {
                 Condition::NotEquals => l != r,
                 Condition::GreaterThan => l > r,
                 Condition::LessThan => l < r,
-                Condition::Invalid => false
             }
         },
         (Value::Bool(l), HandType::Boolean(r)) => {
@@ -266,7 +437,6 @@ fn evaluate_clause(data: &mut (Value, Value), clause: &WhereClause) -> bool {
                 Condition::NotEquals => l != r,
                 Condition::GreaterThan => l > r,
                 Condition::LessThan => l < r,
-                Condition::Invalid => false
             }
         },
         (_, _) => {
