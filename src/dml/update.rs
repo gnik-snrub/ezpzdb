@@ -28,7 +28,7 @@ pub fn update(mut table: Table, mut tokens: Vec<String>) {
 
     let query = build_query(final_query);
 
-    let mut update_rows = evaluate_query(&table.data, &query);
+    let mut update_rows = evaluate_query(&table, &query);
 
     let field_position = table.schema.iter().position(|f| f.name == tokens[1]);
     let field = match field_position {

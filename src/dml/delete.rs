@@ -7,7 +7,7 @@ use crate::{dql::select::{build_query, evaluate_query}, models::Table, storage::
 pub fn delete(mut table: Table, delete_query_tokens: Vec<String>) {
     let query = build_query(delete_query_tokens);
 
-    let filtered_store: HashMap<Value, Value> = evaluate_query(&table.data, &query);
+    let filtered_store: HashMap<Value, Value> = evaluate_query(&table, &query);
 
     if filtered_store.is_empty() {
         println!("Entry not found");
