@@ -42,36 +42,15 @@ pub fn create(create_data: CreateData) {
             let column_position = table_from_disk.schema.iter().position(|p| p.name == column);
             if let Some(pos) = column_position {
                 let index_type;
+                let mut index_data;
                 let column_type = &table_from_disk.schema[pos].data_type;
                 // assign FieldDataType to index_type, according to column type
-                match column_type {
-                    Some(FieldDataType::TEXT) => {
-                        index_type = FieldDataType::TEXT
-                    },
-                    Some(FieldDataType::NUMBER) | Some(FieldDataType::SERIAL) => {
-                        index_type = FieldDataType::NUMBER
-                    },
-                    Some(FieldDataType::BOOLEAN) => {
-                        index_type = FieldDataType::BOOLEAN
-                    },
-                    None => {
-                        println!("Error in schema column data");
-                        return;
-                    }
+                if column_type.is_none() {
+                    println!("Error in schema column data");
+                    return;
+                } else {
+                    (index_type, index_data) = set_index_type(column_type.clone().unwrap());
                 }
-
-                // Go through table data, adding to BTreeMap
-                let mut index_data = match index_type {
-                    FieldDataType::TEXT => {
-                        IndexStore::Text(BTreeMap::new())
-                    },
-                    FieldDataType::NUMBER | FieldDataType::SERIAL => {
-                        IndexStore::Number(BTreeMap::new())
-                    },
-                    FieldDataType::BOOLEAN => {
-                        IndexStore::Boolean(BTreeMap::new())
-                    },
-                };
 
                 for (key, row) in table_from_disk.data.iter() {
                     match &mut index_data {
@@ -133,6 +112,20 @@ pub fn create(create_data: CreateData) {
                 save_to_disk(&table_from_disk.name, &table_from_disk);
             }
         }
+    }
+}
+
+fn set_index_type(column_type: FieldDataType) -> (FieldDataType, IndexStore) {
+    match column_type {
+        FieldDataType::TEXT => {
+            (FieldDataType::TEXT, IndexStore::Text(BTreeMap::new()))
+        },
+        FieldDataType::NUMBER | FieldDataType::SERIAL => {
+            (FieldDataType::NUMBER, IndexStore::Number(BTreeMap::new()))
+        },
+        FieldDataType::BOOLEAN => {
+            (FieldDataType::BOOLEAN, IndexStore::Boolean(BTreeMap::new()))
+        },
     }
 }
 
