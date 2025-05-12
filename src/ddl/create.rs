@@ -55,55 +55,13 @@ pub fn create(create_data: CreateData) {
                 for (key, row) in table_from_disk.data.iter() {
                     match &mut index_data {
                         IndexStore::Text(btree) => {
-                            match &row[&column] {
-                                Value::String(data) => {
-                                    btree.entry(data.clone()).or_default().push(key.clone());
-                                }
-                                _ => {
-                                    println!("Error: schema and column types dont match");
-                                    return;
-                                }
-                            };
+                            set_text_index(key, row, &column, btree);
                         },
                         IndexStore::Number(btree) => {
-                            match &row[&column] {
-                                Value::Number(data) => {
-                                    match (&index_type, data) {
-                                        (FieldDataType::NUMBER, _) | (FieldDataType::SERIAL, _) => {
-                                            if data.is_i64() {
-                                                let int = data.as_i64().unwrap();
-                                                let index_number = IndexNumber::Int(int);
-                                                btree.entry(index_number).or_default().push(key.clone());
-                                            } else if data.is_f64() {
-                                                let float = data.as_f64().unwrap();
-                                                let index_number = IndexNumber::Float(OrderedFloat(float));
-                                                btree.entry(index_number).or_default().push(key.clone());
-                                            } else {
-                                                println!("Error: Unexpected numeric type: {:?}", data);
-                                            }
-                                        },
-                                        _ => {
-                                            println!("Error: Schema and data types don't match");
-                                            return;
-                                        }
-                                    }
-                                }
-                                other => {
-                                    println!("Error: schema and column types dont match. Got: {:?}", other);
-                                    return;
-                                }
-                            };
+                            set_number_index(key, row, &column, &index_type, btree);
                         },
                         IndexStore::Boolean(btree) => {
-                            match &row[&column] {
-                                Value::Bool(data) => {
-                                    btree.entry(*data).or_default().push(key.clone());
-                                }
-                                _ => {
-                                    println!("Error: schema and column types dont match");
-                                    return;
-                                }
-                            };
+                            set_bool_index(key, row, &column, btree);
                         },
                     }
                 }
@@ -167,4 +125,58 @@ fn generate_schema(mut schema_tokens: VecDeque<String>) -> Vec<FieldDef> {
         schema_result.push(FieldDef { name, data_type, primary_key, serial });
     }
     schema_result
+}
+
+fn set_text_index(key: &Value, row: &Value, column: &String, btree: &mut BTreeMap<String, Vec<Value>>) {
+    match &row[column] {
+        Value::String(data) => {
+            btree.entry(data.clone()).or_default().push(key.clone());
+        }
+        _ => {
+            println!("Error: schema and column types dont match");
+            return;
+        }
+    };
+}
+
+fn set_number_index(key: &Value, row: &Value, column: &String, index_type: &FieldDataType, btree: &mut BTreeMap<IndexNumber, Vec<Value>>) {
+    match &row[&column] {
+        Value::Number(data) => {
+            match (index_type, data) {
+                (FieldDataType::NUMBER, _) | (FieldDataType::SERIAL, _) => {
+                    if data.is_i64() {
+                        let int = data.as_i64().unwrap();
+                        let index_number = IndexNumber::Int(int);
+                        btree.entry(index_number).or_default().push(key.clone());
+                    } else if data.is_f64() {
+                        let float = data.as_f64().unwrap();
+                        let index_number = IndexNumber::Float(OrderedFloat(float));
+                        btree.entry(index_number).or_default().push(key.clone());
+                    } else {
+                        println!("Error: Unexpected numeric type: {:?}", data);
+                    }
+                },
+                _ => {
+                    println!("Error: Schema and data types don't match");
+                    return;
+                }
+            }
+        }
+        other => {
+            println!("Error: schema and column types dont match. Got: {:?}", other);
+            return;
+        }
+    };
+}
+
+fn set_bool_index(key: &Value, row: &Value, column: &String, btree: &mut BTreeMap<bool, Vec<Value>>) {
+    match &row[&column] {
+        Value::Bool(data) => {
+            btree.entry(*data).or_default().push(key.clone());
+        }
+        _ => {
+            println!("Error: schema and column types dont match");
+            return;
+        }
+    };
 }
